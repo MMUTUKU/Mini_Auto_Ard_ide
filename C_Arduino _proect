@@ -1,0 +1,160 @@
+#include <TimeLib.h>
+#include <Wire.h>
+#include <DS1307RTC.h>
+#include <DFRobot_RGBLCD1602.h>
+#include <Servo.h>
+
+int lightsPin = 2;
+int motionPin = 3;
+int securityLightsPin = 4;
+int fanPin = 5;
+int servoPin = 8;
+int ldrPin = A0; // Analog pin for LDR
+int temperaturePin = A1; // Analog pin for LM35 temperature sensor
+int lcdPin = A4;
+DFRobot_RGBLCD1602 lcd(16, 2); // Set LCD size (16 columns and 2 rows)
+Servo servo;
+
+void setup() {
+  pinMode(lightsPin, OUTPUT);
+  pinMode(motionPin, INPUT);
+  pinMode(securityLightsPin, OUTPUT);
+  pinMode(fanPin, OUTPUT);
+  pinMode(lcdPin, OUTPUT);
+
+  lcd.init();
+  lcd.setRGB(255, 255, 255); // Set LCD backlight to white
+
+  servo.attach(servoPin);
+
+  // Set initial state
+  digitalWrite(lightsPin, LOW);
+  digitalWrite(securityLightsPin, LOW);
+  digitalWrite(fanPin, LOW);
+
+  // Initialize servo motor to 0 degrees
+  servo.write(0);
+}
+
+void loop() {
+  // Get current time
+  tmElements_t now;
+  if (RTC.read(now)) {
+    int hour = now.Hour;
+    int minute = now.Minute;
+    int second = now.Second;
+
+    // Display current time on LCD
+    lcd.setCursor(0, 0);
+    lcd.print("Time: ");
+    lcd.print(hour);
+    lcd.print(":");
+    lcd.print(minute);
+    lcd.print(":");
+    lcd.print(second);
+    delay(1000);
+    lcd.clear();
+
+    // Lights control
+    if ((hour == 18 && minute == 30 && second >= 0 && second < 30) ||
+        (hour == 21 && minute == 30 && second >= 0 && second < 30)) {
+      digitalWrite(lightsPin, HIGH);
+      lcd.setCursor(0, 1);
+      lcd.print("Lights ON");
+      delay(30000); // 30 seconds delay
+      digitalWrite(lightsPin, LOW);
+      lcd.setCursor(0, 1);
+      lcd.print("Lights OFF");
+    }
+    delay(1000);
+    lcd.clear();
+
+    // Motion detection
+    if (digitalRead(motionPin) == HIGH) {
+      digitalWrite(securityLightsPin, HIGH);
+      lcd.setCursor(0, 1);
+      lcd.print("INTRUDER!");
+    } else {
+      digitalWrite(securityLightsPin, LOW);
+      lcd.setCursor(0, 1);
+      lcd.print(" NO MOTION");
+    }
+    delay(4000);
+    lcd.clear();
+
+    // Room temperature control
+    int temperature = measureTemperature();
+    if (temperature > 25) {
+      digitalWrite(fanPin, HIGH);
+      lcd.setCursor(0, 1);
+      lcd.print("Fan ON");
+    } else {
+      digitalWrite(fanPin, LOW);
+      lcd.setCursor(0, 1);
+      lcd.print("Fan OFF");
+    }
+    delay(1000);
+    lcd.clear();
+
+    // Display temperature on LCD
+    lcd.setCursor(0, 0);
+    lcd.print("Temp: ");
+    lcd.print(temperature);
+    lcd.print(" C");
+    delay(3000);
+    lcd.clear();
+
+    // Control lights based on ambient light level
+    if (measureLightLevel() < 500) { // Adjust threshold as needed
+      digitalWrite(lightsPin, HIGH); // Turn on lights if it's dark
+      lcd.setCursor(0, 1);
+      lcd.print("Lights ON");
+    } else {
+      digitalWrite(lightsPin, LOW); // Turn off lights if it's bright
+      lcd.setCursor(0, 1);
+      lcd.print("Lights OFF");
+    }
+    delay(5000);
+    lcd.clear();
+
+    // Rotate to 0 degrees
+    servo.write(0);
+    delay(1000); // Wait for the servo to reach the position
+
+    // Rotate to 90 degrees
+    servo.write(90);
+    delay(1000); // Wait for the servo to reach the position
+
+    // Rotate to 180 degrees
+    servo.write(180);
+    delay(1000); // Wait for the servo to reach the position
+    lcd.clear();
+
+    // Rotate to 180 degrees
+    servo.write(180);
+    lcd.setCursor(0, 1);
+    lcd.print("Curtains Open");
+    delay(5000); // Wait for the servo to reach the position
+
+    // Rotate to 0 degrees
+    servo.write(0);
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("Curtains Closed");
+    delay(5000); // Wait for the servo to reach the position
+  }
+}
+
+int measureTemperature() {
+  // Read temperature sensor
+  int temperature = analogRead(temperaturePin);
+
+  // Convert analog value to temperature in Celsius
+  float voltage = temperature * 5.0 / 1024.0; // Convert analog reading to voltage
+  float celsius = voltage * 100; // LM35 has 10 mV per degree Celsius sensitivity
+  return celsius;
+}
+
+int measureLightLevel() {
+  return analogRead(ldrPin); // Read LDR value
+}
